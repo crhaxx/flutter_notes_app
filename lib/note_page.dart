@@ -4,6 +4,7 @@ import 'package:flutter_notes_app/note.dart';
 import 'package:flutter_notes_app/note_database.dart';
 import 'package:flutter_notes_app/optionsmenu/data/menu_items.dart';
 import 'package:flutter_notes_app/optionsmenu/model/menu_item.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 class NotePage extends StatefulWidget {
   const NotePage({super.key});
@@ -13,6 +14,20 @@ class NotePage extends StatefulWidget {
 }
 
 class _NotePageState extends State<NotePage> {
+  @override
+  void initState() {
+    super.initState();
+    _initSync();
+  }
+
+  Future<void> _initSync() async {
+    try {
+      await notesDatabase.sync();
+    } catch (e) {
+      print("Sync error: $e");
+    }
+  }
+
   //Note: notes db
   final notesDatabase = NoteDatabase();
 
@@ -198,24 +213,17 @@ class _NotePageState extends State<NotePage> {
       ),
 
       //Info: Body -> StreamBuilder
-      body: StreamBuilder(
-        //Note: listens to this stream
-        stream: notesDatabase.steam,
-
-        //Note: to build our UI
-        builder: (context, snapshot) {
-          //Info: loading
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          //Info: loaded
-          final notes = snapshot.data!;
-
-          //Note: list of notes
+      body: ValueListenableBuilder(
+        valueListenable: Hive.box<Note>('notes').listenable(),
+        builder: (context, Box<Note> box, _) {
           final currentUserEmail = authService.getCurrentUserEmail();
-          final userNotes =
-              notes.where((note) => note.author == currentUserEmail).toList();
+          final userNotes = box.values
+              .where((note) => note.author == currentUserEmail)
+              .toList();
+
+          if (userNotes.isEmpty) {
+            return Center(child: Text('No notes found'));
+          }
 
           return GridView.builder(
             gridDelegate:
@@ -223,7 +231,6 @@ class _NotePageState extends State<NotePage> {
             itemCount: userNotes.length,
             itemBuilder: (context, index) {
               final note = userNotes[index];
-
               return Container(
                 margin: EdgeInsets.symmetric(horizontal: 10, vertical: 20),
                 decoration: BoxDecoration(
